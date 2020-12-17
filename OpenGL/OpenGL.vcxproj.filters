@@ -13,10 +13,21 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Ressourcendateien\Shaders">
+      <UniqueIdentifier>{4c176ab2-b3ef-40ef-bd11-b8942c37d2bf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\default.fsh">
+      <Filter>Ressourcendateien\Shaders</Filter>
+    </None>
+    <None Include="Shaders\default.vsh">
+      <Filter>Ressourcendateien\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

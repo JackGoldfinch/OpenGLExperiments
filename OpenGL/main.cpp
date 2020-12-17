@@ -6,9 +6,14 @@
 #include <glbinding/Binding.h>
 #include <glbinding/gl46/gl.h>
 
+#include <glm/glm.hpp>
+
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory>
+#include <fstream>
+#include <filesystem>
 
 SDL_Window *window;
 SDL_GLContext ctx;
@@ -49,6 +54,31 @@ void system_event(SDL_Event &evt) {
 	}
 }
 
+struct SCANCODE_STRING_ {
+	const char *operator[](Uint32 scancode) const noexcept {
+		try {
+			return strings.at(scancode);
+		} catch (...) {
+			return nullptr;
+		}
+	}
+
+	static const std::unordered_map<Uint32, const char *> strings;
+} SCANCODE_STRING;
+
+#define ENTRY(code,text) {SDL_SCANCODE_##code, text}
+
+const std::unordered_map<Uint32, const char *> SCANCODE_STRING_::strings{
+	ENTRY(ESCAPE, "ESC"),
+	ENTRY(LALT, "L_ALT"),
+	ENTRY(RETURN, "RETURN"),
+	ENTRY(SPACE, "SPACE"),
+	ENTRY(A, "A"),
+	ENTRY(B, "B")
+};
+
+#undef ENTRY
+
 const unsigned int max_key_combo_count = 4;
 
 namespace std {
@@ -60,7 +90,9 @@ namespace std {
 		auto last = set.cend();
 		last--;
 		for (const auto &key : set) {
-			str += std::to_string(key);
+			auto scstr = SCANCODE_STRING[key];
+
+			str += (scstr ? scstr : std::to_string(key));
 
 			if (key != *last) {
 				str += ":";
@@ -145,6 +177,95 @@ const std::unordered_map<Uint32, event_func> events{
 	{SDL_KEYDOWN, [](SDL_Event &evt) {keyboard_event(evt.key); }}
 };
 
+template<gl::GLenum T>
+struct shader_program {
+	shader_program(const std::filesystem::path &path) {
+		
+		try {
+
+			{
+				auto size = std::filesystem::file_size(path);
+				std::vector<char> buf(size + 1);
+				std::ifstream file(path);
+				file.read(buf.data(), size);
+
+				const char *const pbuf = buf.data();
+				id_ = gl::glCreateShaderProgramv(T, 1, &pbuf);
+			}
+
+			{
+				gl::GLint is_linked = 0;
+				gl::glGetProgramiv(id_, gl::GL_LINK_STATUS, &is_linked);
+
+				if (!is_linked) {
+					gl::GLint max_length = 0;
+					gl::glGetProgramiv(id_, gl::GL_INFO_LOG_LENGTH, &max_length);
+
+					if (max_length) {
+						std::vector<char> info_log(max_length);
+						gl::glGetProgramInfoLog(id_, max_length, &max_length, info_log.data());
+
+						std::cout << "Program link error: " << info_log.data() << std::endl;
+					}
+
+					throw false;
+				}
+			}
+
+			{
+				gl::glValidateProgram(id_);
+
+				gl::GLint is_valid = 0;
+				gl::glGetProgramiv(id_, gl::GL_VALIDATE_STATUS, &is_valid);
+
+				if (!is_valid) {
+					gl::GLint max_length = 0;
+					gl::glGetProgramiv(id_, gl::GL_INFO_LOG_LENGTH, &max_length);
+
+					if (max_length) {
+						std::vector<char> info_log(max_length);
+						gl::glGetProgramInfoLog(id_, max_length, &max_length, info_log.data());
+
+						std::cout << "Program validation error: " << info_log.data() << std::endl;
+					}
+
+					throw false;
+				}
+
+				{
+					gl::GLint loc;
+					gl::glGetUniformLocation(id_, "transform");
+					
+					gl::GLint uniforms_num;
+					gl::glGetProgramiv(id_, gl::GL_ACTIVE_UNIFORMS, &uniforms_num);
+
+					gl::GLint uniforms_len;
+					gl::glGetProgramiv(id_, gl::GL_ACTIVE_UNIFORM_MAX_LENGTH, &uniforms_len);
+
+					std::vector<char> buf(uniforms_len);
+
+					for (unsigned int i = 0; i < uniforms_num; ++i) {
+						gl::glGetActiveUniformName(id_, i, uniforms_len, nullptr, buf.data());
+					}
+				}
+			}
+		} catch (...) {
+			cleanup();
+		}
+	}
+
+	~shader_program() {
+		cleanup();
+	}
+
+	void cleanup() {
+		gl::glDeleteProgram(id_);
+		id_ = 0;
+	}
+
+	gl::GLint id_;
+};
+
 int main(int argc, char *args[]) {
 	if (SDL_Init(SDL_INIT_VIDEO)) {
 		return -1;
@@ -170,8 +291,46 @@ int main(int argc, char *args[]) {
 
 	glbinding::Binding::initialize(nullptr);
 
+	gl::glViewport(0, 0, 640, 480);
+
 	gl::glClearColor(1.f, 0.f, 0.f, 1.f);
 
+	gl::GLuint vao;
+	gl::glCreateVertexArrays(1, &vao);
+	gl::glBindVertexArray(vao);
+
+	glm::vec2 vertices[] = {
+		{-.5f, -.5f},
+		{.5f, -.5f},
+		{0.f, .5f}
+	};
+
+	gl::GLuint vb;
+	gl::glGenBuffers(1, &vb);
+	gl::glBindBuffer(gl::GL_ARRAY_BUFFER, vb);
+	gl::glNamedBufferData(vb, 3 * sizeof(glm::vec2), vertices, gl::GL_STATIC_DRAW);
+
+	gl::glEnableVertexAttribArray(0);
+	gl::glVertexAttribPointer(0, 2, gl::GL_FLOAT, gl::GL_FALSE, sizeof(glm::vec2), 0);
+
+	std::filesystem::path vs_path{ "Shaders/default.vsh" };
+	auto vs = std::make_unique<shader_program<gl::GL_VERTEX_SHADER>>(vs_path);
+
+	std::filesystem::path fs_path{ "Shaders/default.fsh" };
+	auto fs = std::make_unique<shader_program<gl::GL_FRAGMENT_SHADER>>(fs_path);
+
+	gl::GLuint pp;
+	gl::glCreateProgramPipelines(1, &pp);
+	gl::glUseProgramStages(pp, gl::GL_VERTEX_SHADER_BIT, vs->id_);
+	gl::glUseProgramStages(pp, gl::GL_FRAGMENT_SHADER_BIT, fs->id_);
+
+	gl::glUseProgram(0);
+
+	gl::glBindProgramPipeline(pp);
+
+	glm::mat4 transform(1.f);
+	gl::glProgramUniformMatrix4fv(vs->id_, 0, 1, gl::GL_FALSE, &transform[0][0]);
+	
 
 	while (running) {
 
@@ -193,10 +352,21 @@ int main(int argc, char *args[]) {
 
 		gl::glClear(gl::ClearBufferMask::GL_COLOR_BUFFER_BIT);
 
+		gl::glDrawArrays(gl::GL_TRIANGLES, 0, 3);
+
 		SDL_GL_SwapWindow(window);
 
 	}
 
+	gl::glDeleteProgramPipelines(1, &pp);
+
+	gl::glDeleteBuffers(1, &vb);
+
+	gl::glDeleteVertexArrays(1, &vao);
+
+	fs.reset();
+
+	//vs.reset();
 
 
 	SDL_GL_DeleteContext(ctx);
