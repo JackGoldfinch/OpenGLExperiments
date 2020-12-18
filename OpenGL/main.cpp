@@ -7,6 +7,7 @@
 #include <glbinding/gl46/gl.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
 #include <unordered_map>
@@ -15,13 +16,27 @@
 #include <fstream>
 #include <filesystem>
 
+struct settings_ {
+	SDL_WindowFlags fullscreen_mode = SDL_WINDOW_FULLSCREEN;
+	Uint32 current_fullscreen_mode = 0;
+
+	struct video {
+		gl::GLuint width, height;
+	};
+
+	struct windowed_ : video {
+
+	} windowed;
+
+	struct fullscreen_ : video {
+
+	} fullscreen;
+} settings;
+
 SDL_Window *window;
 SDL_GLContext ctx;
 
 bool running = true;
-
-auto sdl_fullscreen_mode = SDL_WINDOW_FULLSCREEN;
-Uint32 current_fullscreen_mode = 0;
 
 #define evt_string(evt) {evt, #evt}
 
@@ -110,6 +125,14 @@ namespace std {
 	};
 }
 
+void setup_windowed_mode() {
+	gl::glViewport(0, 0, settings.windowed.width, settings.windowed.height);
+}
+
+void setup_fullscreen_mode() {
+	gl::glViewport(0, 0, settings.fullscreen.width, settings.fullscreen.height);
+}
+
 std::unordered_map<std::unordered_set<SDL_Scancode>, void(*)()> key_combo_actions{
 	{{SDL_SCANCODE_ESCAPE}, []() {
 		SDL_Event evt;
@@ -118,12 +141,14 @@ std::unordered_map<std::unordered_set<SDL_Scancode>, void(*)()> key_combo_action
 	}},
 
 	{{SDL_SCANCODE_LALT, SDL_SCANCODE_RETURN}, []() {
-		if (current_fullscreen_mode == 0) {
-			current_fullscreen_mode = sdl_fullscreen_mode;
-			SDL_SetWindowFullscreen(window, sdl_fullscreen_mode);
+		if (settings.current_fullscreen_mode == 0) {
+			settings.current_fullscreen_mode = settings.fullscreen_mode;
+			SDL_SetWindowFullscreen(window, settings.fullscreen_mode);
+			gl::glViewport(0, 0, 2560, 1440);
 		} else {
-			current_fullscreen_mode = 0;
+			settings.current_fullscreen_mode = 0;
 			SDL_SetWindowFullscreen(window, 0);
+			gl::glViewport(0, 0, 640, 480);
 		}
 	}}
 };
@@ -275,7 +300,13 @@ int main(int argc, char *args[]) {
 	SDL_DisplayMode mdm;
 	SDL_GetDesktopDisplayMode(0, &mdm);
 
-	window = SDL_CreateWindow("OpenGL Experiments", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_OPENGL);
+	settings.windowed.width = 640;
+	settings.windowed.height = 480;
+
+	settings.fullscreen.width = mdm.w;
+	settings.fullscreen.height = mdm.h;
+
+	window = SDL_CreateWindow("OpenGL Experiments", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, settings.windowed.width, settings.windowed.height, SDL_WINDOW_OPENGL);
 	if (!window) {
 		std::cout << SDL_GetError() << std::endl;
 		return -1;
@@ -291,7 +322,7 @@ int main(int argc, char *args[]) {
 
 	glbinding::Binding::initialize(nullptr);
 
-	gl::glViewport(0, 0, 640, 480);
+	setup_windowed_mode();
 
 	gl::glClearColor(1.f, 0.f, 0.f, 1.f);
 
@@ -328,8 +359,12 @@ int main(int argc, char *args[]) {
 
 	gl::glBindProgramPipeline(pp);
 
-	glm::mat4 transform(1.f);
-	gl::glProgramUniformMatrix4fv(vs->id_, 0, 1, gl::GL_FALSE, &transform[0][0]);
+	glm::mat4 model(1.f);
+	model = glm::translate(model, glm::vec3{-1.f, 0.f, 0.f});
+	gl::glProgramUniformMatrix4fv(vs->id_, 0, 1, gl::GL_FALSE, &model[0][0]);
+
+	auto projection = glm::ortho(-320.f, 320.f, -240.f, 240.f);
+	gl::glProgramUniformMatrix4fv(vs->id_, 1, 1, gl::GL_FALSE, &projection[0][0]);
 	
 
 	while (running) {
@@ -366,7 +401,7 @@ int main(int argc, char *args[]) {
 
 	fs.reset();
 
-	//vs.reset();
+	vs.reset();
 
 
 	SDL_GL_DeleteContext(ctx);
