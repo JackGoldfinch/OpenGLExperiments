@@ -259,7 +259,11 @@ struct shader_program {
 
 				{
 					gl::GLint loc;
-					gl::glGetUniformLocation(id_, "transform");
+					loc = gl::glGetUniformBlockIndex(id_, "Matrices");
+					loc = gl::glGetUniformBlockIndex(id_, "matrices");
+
+					loc = gl::glGetUniformLocation(id_, "model");
+					loc = gl::glGetUniformLocation(id_, "projection");
 					
 					gl::GLint uniforms_num;
 					gl::glGetProgramiv(id_, gl::GL_ACTIVE_UNIFORMS, &uniforms_num);
@@ -358,6 +362,11 @@ int main(int argc, char *args[]) {
 	gl::glUseProgram(0);
 
 	gl::glBindProgramPipeline(pp);
+
+	gl::GLuint ub;
+	gl::glCreateBuffers(1, &ub);
+	gl::glBindBuffer(gl::GL_UNIFORM_BUFFER, ub);
+
 
 	glm::mat4 model(1.f);
 	model = glm::translate(model, glm::vec3{-1.f, 0.f, 0.f});

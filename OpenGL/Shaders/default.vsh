@@ -2,7 +2,13 @@
 
 layout(location = 0) in vec2 pos;
 
-uniform mat4 transform;
+layout(std140) uniform Matrices{
+	mat4 model;
+	mat4 projection;
+} matrices;
+
+uniform mat4 model;
+uniform mat4 projection;
 
 out gl_PerVertex {
 	vec4 gl_Position;
@@ -11,5 +17,5 @@ out gl_PerVertex {
 };
 
 void main() {
-	gl_Position = transform * vec4(pos.x, pos.y, 0.0, 1.0);
+	gl_Position = projection * matrices.model * vec4(pos.x, pos.y, 0.0, 1.0);
 }
