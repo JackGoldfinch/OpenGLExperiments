@@ -20,6 +20,7 @@ namespace pt = boost::property_tree;
 #include <fstream>
 #include <filesystem>
 #include <initializer_list>
+#include <chrono>
 
 #include "glbuffers.hpp"
 
@@ -39,6 +40,14 @@ struct matrices : uniform_buffer_object<matrices_data> {
 
 	void update_projection(const glm::mat4 &projection) {
 		update(offsetof(matrices_data, projection), sizeof(glm::mat4), &projection[0][0]);
+	}
+
+	void update_model(const glm::mat4 &model) {
+		update(offsetof(matrices_data, model), sizeof(glm::mat4), &model[0][0]);
+	}
+
+	void update_view(const glm::mat4 &view) {
+		update(offsetof(matrices_data, view), sizeof(glm::mat4), &view[0][0]);
 	}
 };
 
@@ -112,13 +121,13 @@ struct settings_ {
 } settings;
 
 void setup_windowed_mode() {
-	gl::glViewport(0, 0, settings.video.windowed.width, settings.video.windowed.height);
+	gl::glViewport(0, 0, settings.video.fullscreen.width, settings.video.fullscreen.height);
 
 	auto w2 = settings.video.windowed.width / 2.f;
 	auto h2 = settings.video.windowed.height / 2.f;
 
-	auto projection = glm::ortho(-w2, w2, -h2, h2);
-	settings.roaming.matrices->update_projection(projection);
+	//auto projection = glm::ortho(-w2, w2, -h2, h2, -1000.f, 1000.f);
+	//settings.roaming.matrices->update_projection(projection);
 }
 
 void setup_fullscreen_mode() {
@@ -127,7 +136,7 @@ void setup_fullscreen_mode() {
 	auto w2 = settings.video.fullscreen.width / 2.f;
 	auto h2 = settings.video.fullscreen.height / 2.f;
 
-	auto projection = glm::ortho(-w2, w2, -h2, h2);
+	auto projection = glm::ortho(-w2, w2, -h2, h2, -1000.f, 1000.f);
 	settings.roaming.matrices->update_projection(projection);
 }
 
@@ -179,21 +188,27 @@ int main(int argc, char *args[]) {
 
 	glbinding::Binding::initialize(nullptr);
 
+	gl::glEnable(gl::GL_DEPTH_TEST);
+	gl::glDepthFunc(gl::GL_ALWAYS);
+
+	gl::glDisable(gl::GL_CULL_FACE);
+
 	settings.roaming.matrices = std::make_unique<matrices>(0);
 	settings.roaming.matrices->update();
 
 	setup_windowed_mode();
 
 	gl::glClearColor(1.f, 0.f, 0.f, 1.f);
+	gl::glClearDepth(1000.f);
 
 	gl::GLuint vao;
 	gl::glCreateVertexArrays(1, &vao);
 	gl::glBindVertexArray(vao);
 
 	glm::vec2 vertices[] = {
-		{-320.f, -240.f},
-		{320.f, -240.f},
-		{0.f, 240.f}
+		{-3.f, -1.f},
+		{3.f, -1.f},
+		{0.f, 2.f}
 	};
 
 	gl::GLuint vb;
@@ -213,8 +228,38 @@ int main(int argc, char *args[]) {
 	auto pp = std::make_unique<shader_pipeline>(shader_pipeline::init_list{vs.get(), fs.get()});
 	pp->bind();
 
-	while (running) {
+	gl::GLuint fb;
+	gl::glCreateFramebuffers(1, &fb);
 
+	gl::GLuint cb;
+	gl::glCreateTextures(gl::GL_TEXTURE_2D, 1, &cb);
+	gl::glBindTexture(gl::GL_TEXTURE_2D, cb);
+	gl::glTexImage2D(gl::GL_TEXTURE_2D, 0, gl::GL_RGBA16F, settings.video.fullscreen.width, settings.video.fullscreen.height, 0, gl::GL_RGBA, gl::GL_FLOAT, nullptr);
+	gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR);
+	gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR);
+	gl::glNamedFramebufferTexture(fb, gl::GL_COLOR_ATTACHMENT0, cb, 0);
+
+	gl::GLuint db;
+	gl::glCreateRenderbuffers(1, &db);
+	gl::glNamedRenderbufferStorage(db, gl::GL_DEPTH_COMPONENT16, settings.video.fullscreen.width, settings.video.fullscreen.height);
+	gl::glNamedFramebufferRenderbuffer(fb, gl::GL_DEPTH_ATTACHMENT, gl::GL_RENDERBUFFER, db);
+
+	if (gl::glCheckFramebufferStatus(gl::GL_FRAMEBUFFER) != gl::GL_FRAMEBUFFER_COMPLETE) {
+		auto error = gl::glGetError();
+
+		std::cout << "Framebuffer not complete: " << static_cast<gl::GLint>(error) << std::endl;
+	}
+
+	gl::glBindFramebuffer(gl::GL_FRAMEBUFFER, fb);
+
+	//settings.roaming.matrices->update_projection(glm::perspective(glm::radians(86.f), 16.f / 9.f, 0.f, 100.f));
+
+	float delta_time = 0.f;
+	auto last_frame = std::chrono::high_resolution_clock::now();
+
+	glm::mat4 rotate(1.f);
+
+	while (running) {
 		SDL_Event evt;
 		while (running && SDL_PollEvent(&evt)) {
 
@@ -231,12 +276,21 @@ int main(int argc, char *args[]) {
 
 		}
 
-		gl::glClear(gl::ClearBufferMask::GL_COLOR_BUFFER_BIT);
+		gl::glClear(gl::ClearBufferMask::GL_COLOR_BUFFER_BIT | gl::ClearBufferMask::GL_DEPTH_BUFFER_BIT);
+
+		/*auto rotation = delta_time * 90.f;
+		rotate = glm::rotate(rotate, glm::radians(rotation), glm::vec3{0.f, 1.f, 0.f});
+		settings.roaming.matrices->update_model(rotate);*/
 
 		gl::glDrawArrays(gl::GL_TRIANGLES, 0, 3);
 
+		gl::glBlitNamedFramebuffer(fb, 0, 0, 0, 2560, 1440, 0, 0, 1280, 1024, gl::GL_COLOR_BUFFER_BIT, gl::GL_LINEAR);
+
 		SDL_GL_SwapWindow(window);
 
+		auto current_frame = std::chrono::high_resolution_clock::now();
+		delta_time = (last_frame - current_frame).count() / 1000.f / 1000.f / 1000.f;
+		last_frame = current_frame;
 	}
 
 	gl::glDeleteBuffers(1, &vb);
