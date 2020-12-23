@@ -127,7 +127,8 @@ void setup_windowed_mode() {
 	auto h2 = settings.video.windowed.height / 2.f;
 
 	//auto projection = glm::ortho(-w2, w2, -h2, h2, -1000.f, 1000.f);
-	//settings.roaming.matrices->update_projection(projection);
+	auto projection = glm::perspective(glm::radians(86.f), 16.f / 9.f, 0.f, 100.f);
+	settings.roaming.matrices->update_projection(projection);
 }
 
 void setup_fullscreen_mode() {
@@ -206,10 +207,16 @@ int main(int argc, char *args[]) {
 	gl::glBindVertexArray(vao);
 
 	glm::vec2 vertices[] = {
+		{-.5f, -.5f},
+		{.5f, -.5f},
+		{0.f, .5f}
+	};
+
+	/*glm::vec2 vertices[] = {
 		{-3.f, -1.f},
 		{3.f, -1.f},
 		{0.f, 2.f}
-	};
+	};*/
 
 	gl::GLuint vb;
 	gl::glGenBuffers(1, &vb);
@@ -252,12 +259,10 @@ int main(int argc, char *args[]) {
 
 	gl::glBindFramebuffer(gl::GL_FRAMEBUFFER, fb);
 
-	//settings.roaming.matrices->update_projection(glm::perspective(glm::radians(86.f), 16.f / 9.f, 0.f, 100.f));
-
 	float delta_time = 0.f;
 	auto last_frame = std::chrono::high_resolution_clock::now();
 
-	glm::mat4 rotate(1.f);
+	auto rotation = 0.f;
 
 	while (running) {
 		SDL_Event evt;
@@ -278,13 +283,14 @@ int main(int argc, char *args[]) {
 
 		gl::glClear(gl::ClearBufferMask::GL_COLOR_BUFFER_BIT | gl::ClearBufferMask::GL_DEPTH_BUFFER_BIT);
 
-		/*auto rotation = delta_time * 90.f;
-		rotate = glm::rotate(rotate, glm::radians(rotation), glm::vec3{0.f, 1.f, 0.f});
-		settings.roaming.matrices->update_model(rotate);*/
+		rotation += delta_time * 90.f;
+		auto model = glm::translate(glm::mat4(1.f), glm::vec3{ 0.f, 0.f, -.5f });
+		model = glm::rotate(model, glm::radians(rotation), glm::vec3{0.f, 1.f, 0.f});
+		settings.roaming.matrices->update_model(model);
 
 		gl::glDrawArrays(gl::GL_TRIANGLES, 0, 3);
 
-		gl::glBlitNamedFramebuffer(fb, 0, 0, 0, 2560, 1440, 0, 0, 1280, 1024, gl::GL_COLOR_BUFFER_BIT, gl::GL_LINEAR);
+		gl::glBlitNamedFramebuffer(fb, 0, 0, 0, 2560, 1440, 0, 0, 1280, 720, gl::GL_COLOR_BUFFER_BIT, gl::GL_LINEAR);
 
 		SDL_GL_SwapWindow(window);
 
