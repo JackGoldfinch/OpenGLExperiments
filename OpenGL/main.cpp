@@ -235,29 +235,19 @@ int main(int argc, char *args[]) {
 	auto pp = std::make_unique<shader_pipeline>(shader_pipeline::init_list{vs.get(), fs.get()});
 	pp->bind();
 
-	gl::GLuint fb;
-	gl::glCreateFramebuffers(1, &fb);
+	auto cb = std::make_unique<texture_2d>();
+	cb->image(0, gl::GL_RGBA16F, settings.video.fullscreen.width, settings.video.fullscreen.height, gl::GL_RGBA, gl::GL_FLOAT, nullptr);
 
-	gl::GLuint cb;
-	gl::glCreateTextures(gl::GL_TEXTURE_2D, 1, &cb);
-	gl::glBindTexture(gl::GL_TEXTURE_2D, cb);
-	gl::glTexImage2D(gl::GL_TEXTURE_2D, 0, gl::GL_RGBA16F, settings.video.fullscreen.width, settings.video.fullscreen.height, 0, gl::GL_RGBA, gl::GL_FLOAT, nullptr);
-	gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR);
-	gl::glTexParameteri(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR);
-	gl::glNamedFramebufferTexture(fb, gl::GL_COLOR_ATTACHMENT0, cb, 0);
+	auto db = std::make_unique<renderbuffer>();
+	db->storage(gl::GL_DEPTH_COMPONENT16, settings.video.fullscreen.width, settings.video.fullscreen.height);
 
-	gl::GLuint db;
-	gl::glCreateRenderbuffers(1, &db);
-	gl::glNamedRenderbufferStorage(db, gl::GL_DEPTH_COMPONENT16, settings.video.fullscreen.width, settings.video.fullscreen.height);
-	gl::glNamedFramebufferRenderbuffer(fb, gl::GL_DEPTH_ATTACHMENT, gl::GL_RENDERBUFFER, db);
+	auto fb = std::make_unique<framebuffer>();
+	fb->texture(*cb, gl::GL_COLOR_ATTACHMENT0, 0);
+	fb->renderbuffer(*db, gl::GL_DEPTH_ATTACHMENT);
 
-	if (gl::glCheckFramebufferStatus(gl::GL_FRAMEBUFFER) != gl::GL_FRAMEBUFFER_COMPLETE) {
-		auto error = gl::glGetError();
+	fb->check_status();
 
-		std::cout << "Framebuffer not complete: " << static_cast<gl::GLint>(error) << std::endl;
-	}
-
-	gl::glBindFramebuffer(gl::GL_FRAMEBUFFER, fb);
+	fb->bind(gl::GL_FRAMEBUFFER);
 
 	float delta_time = 0.f;
 	auto last_frame = std::chrono::high_resolution_clock::now();
@@ -290,7 +280,7 @@ int main(int argc, char *args[]) {
 
 		gl::glDrawArrays(gl::GL_TRIANGLES, 0, 3);
 
-		gl::glBlitNamedFramebuffer(fb, 0, 0, 0, 2560, 1440, 0, 0, 1280, 720, gl::GL_COLOR_BUFFER_BIT, gl::GL_LINEAR);
+		gl::glBlitNamedFramebuffer(fb->id_, 0, 0, 0, 2560, 1440, 0, 0, 1280, 720, gl::GL_COLOR_BUFFER_BIT, gl::GL_LINEAR);
 
 		SDL_GL_SwapWindow(window);
 
@@ -302,6 +292,12 @@ int main(int argc, char *args[]) {
 	gl::glDeleteBuffers(1, &vb);
 
 	gl::glDeleteVertexArrays(1, &vao);
+
+	fb.reset();
+
+	db.reset();
+
+	cb.reset();
 
 	pp.reset();
 

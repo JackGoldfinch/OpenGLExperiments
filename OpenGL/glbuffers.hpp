@@ -1,8 +1,10 @@
 #pragma once
 
 struct gl_object {
-	static gl::GLuint init() {
+	gl::GLuint id_ = 0;
 
+	~gl_object() {
+		id_ = 0;
 	}
 };
 
@@ -52,5 +54,94 @@ struct uniform_buffer_object {
 
 	void update() {
 		update(0, DATA_SIZE, &data_);
+	}
+};
+
+
+struct gl_texture : gl_object {
+	virtual void bind() = 0;
+};
+
+
+template<gl::GLenum target>
+struct texture : gl_texture {
+	static texture *bound_;
+	
+	texture() {
+		gl::glCreateTextures(target, 1, &id_);
+		bind();
+		setup_filtering();
+	}
+
+	~texture() {
+		gl::glDeleteTextures(1, &id_);
+	}
+
+	void setup_filtering() {
+		gl::glTexParameteri(target, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR);
+		gl::glTexParameteri(target, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR);
+	}
+
+	virtual void bind() {
+		if (bound_ != this) {
+			bound_ = this;
+			gl::glBindTexture(target, id_);
+		}
+	}
+};
+
+template<gl::GLenum target>
+texture<target> *texture<target>::bound_ = nullptr;
+
+
+struct texture_2d : texture<gl::GL_TEXTURE_2D> {
+	texture_2d():texture() {
+
+	}
+
+	void image(gl::GLint level, gl::GLenum internal_format, gl::GLsizei width, gl::GLsizei height, gl::GLenum format, gl::GLenum type, const void *pixels) {
+		gl::glTexImage2D(gl::GL_TEXTURE_2D, level, internal_format, width, height, 0, format, type, pixels);
+	}
+};
+
+
+struct renderbuffer : gl_object {
+	renderbuffer() {
+		gl::glCreateRenderbuffers(1, &id_);
+	}
+
+	~renderbuffer() {
+		gl::glDeleteRenderbuffers(1, &id_);
+	}
+
+	void storage(gl::GLenum internal_format, gl::GLsizei width, gl::GLsizei height) {
+		gl::glNamedRenderbufferStorage(id_, internal_format, width, height);
+	}
+};
+
+
+struct framebuffer : gl_object {
+	framebuffer() {
+		gl::glCreateFramebuffers(1, &id_);
+	}
+
+	~framebuffer() {
+		gl::glDeleteFramebuffers(1, &id_);
+	}
+
+	void texture(const gl_texture &t, gl::GLenum attachment, gl::GLuint level) {
+		gl::glNamedFramebufferTexture(id_, attachment, t.id_, level);
+	}
+
+	void renderbuffer(const renderbuffer &rb, gl::GLenum attachment) {
+		gl::glNamedFramebufferRenderbuffer(id_, attachment, gl::GL_RENDERBUFFER, rb.id_);
+	}
+
+	void check_status() {
+		gl::glCheckNamedFramebufferStatus(id_, gl::GL_FRAMEBUFFER);
+	}
+
+	void bind(gl::GLenum target) {
+		gl::glBindFramebuffer(target, id_);
 	}
 };
