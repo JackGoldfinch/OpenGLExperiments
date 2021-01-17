@@ -58,51 +58,7 @@ struct uniform_buffer_object {
 };
 
 
-struct gl_texture : gl_object {
-	virtual void bind() = 0;
-};
-
-
-template<gl::GLenum target>
-struct texture : gl_texture {
-	static texture *bound_;
-	
-	texture() {
-		gl::glCreateTextures(target, 1, &id_);
-		bind();
-		setup_filtering();
-	}
-
-	~texture() {
-		gl::glDeleteTextures(1, &id_);
-	}
-
-	void setup_filtering() {
-		gl::glTexParameteri(target, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR);
-		gl::glTexParameteri(target, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR);
-	}
-
-	virtual void bind() {
-		if (bound_ != this) {
-			bound_ = this;
-			gl::glBindTexture(target, id_);
-		}
-	}
-};
-
-template<gl::GLenum target>
-texture<target> *texture<target>::bound_ = nullptr;
-
-
-struct texture_2d : texture<gl::GL_TEXTURE_2D> {
-	texture_2d():texture() {
-
-	}
-
-	void image(gl::GLint level, gl::GLenum internal_format, gl::GLsizei width, gl::GLsizei height, gl::GLenum format, gl::GLenum type, const void *pixels) {
-		gl::glTexImage2D(gl::GL_TEXTURE_2D, level, internal_format, width, height, 0, format, type, pixels);
-	}
-};
+#include "texture.hpp"
 
 
 struct renderbuffer : gl_object {

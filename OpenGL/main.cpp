@@ -236,6 +236,7 @@ int main(int argc, char *args[]) {
 	pp->bind();
 
 	auto cb = std::make_unique<texture_2d>();
+	cb->setup_filtering();
 	cb->image(0, gl::GL_RGBA16F, settings.video.fullscreen.width, settings.video.fullscreen.height, gl::GL_RGBA, gl::GL_FLOAT, nullptr);
 
 	auto db = std::make_unique<renderbuffer>();

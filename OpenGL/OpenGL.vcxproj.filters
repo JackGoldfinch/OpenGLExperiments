@@ -36,5 +36,8 @@
     <ClInclude Include="glbuffers.hpp">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="texture.hpp">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
